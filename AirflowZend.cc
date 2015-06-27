@@ -148,12 +148,12 @@ bool WINAPI CheckPackageAfterLayout(wchar_t *szPackagePath,size_t pksize,wchar_t
         return false;
     if((err=_waccess_s(const_cast<const wchar_t *>(szPackagePath),04))!=0){
         if(err!=ENOENT){
-            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code:"<<err<<std::endl;
+            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code: "<<err<<std::endl;
             return false;
         }
         if(StringFindSlash(const_cast<const wchar_t*>(szPackagePath)))
         {
-            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code:"<<err<<std::endl;
+            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code: "<<err<<std::endl;
             return false;
         }
         str=szbuffer;
@@ -161,7 +161,7 @@ bool WINAPI CheckPackageAfterLayout(wchar_t *szPackagePath,size_t pksize,wchar_t
         str+=szPackagePath;
         if((err=_waccess_s(str.c_str(),04))!=0)
         {
-            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code:"<<err<<std::endl;
+            std::wcout<<L"Check File Access Failed: "<<szPackagePath<<L"\nError Code: "<<err<<std::endl;
             return false;
         }else{
             wcscpy_s(szPackagePath,pksize,str.c_str());
@@ -311,7 +311,7 @@ DWORD WINAPI AirflowZendMethodNonUI(AirflowStructure &airflowst)
 }
 
 /////This is Call New Thread
-DWORD WINAPI AirflowZendMethod(LPVOID lParam)
+DWORD WINAPI BackgroundWorker(LPVOID lParam)
 {
     if(!lParam)
         return 1;

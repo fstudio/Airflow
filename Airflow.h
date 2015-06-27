@@ -78,7 +78,7 @@ struct AirflowTaskData{
 
 int AirflowUIChannel(AirflowStructure &cArgs);
 DWORD WINAPI AirflowZendMethodNonUI(AirflowStructure &airflowst);
-DWORD WINAPI AirflowZendMethod(LPVOID lParam);
+DWORD WINAPI BackgroundWorker(LPVOID lParam);
 bool AirflowFileOpenWindow(
     HWND hParent,
     std::wstring &filename,

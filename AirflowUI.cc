@@ -29,7 +29,7 @@ public:
     {
         FILE *stream;
         auto err=_wfreopen_s(&stream,stdioimage(),L"w+t", stdout);
-        err=_wfreopen_s(&stream,stdioimage(),L"w",stderr);
+        err=_wfreopen_s(&stream,stdioimage(),L"w+",stderr);
         if(err==0)
             isOpen=true;
     }
@@ -42,7 +42,7 @@ public:
     }
 };
 
-const LPCWSTR PackageSubffix[] = {L".msu", L".msi", L".cab"};
+const LPCWSTR PackageSubffix[] = {L".msu",L".msp", L".msi", L".cab"};
 std::vector<std::wstring> vFileList;
 #define MAXPAGES 5
 
@@ -102,7 +102,6 @@ INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lPa
                 break;
                 case IDC_BUTTON_ENTER:
                 {
-                    SendDlgItemMessage(hWnd,IDC_PROCESS_RATE,PBM_SETPOS ,50,0L);
                     GetWindowText(GetDlgItem(hWnd,IDC_EDIT_FILEURL),szPackagePath,4096);
                     GetWindowText(GetDlgItem(hWnd,IDC_EDIT_FOLDER),szRecover,4096);
                     if(CheckPackageAfterLayout(szPackagePath,4096,szRecover,4096)){
@@ -115,10 +114,11 @@ INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lPa
                         data->rawfile=szPackagePath;
                         data->outdir=szRecover;
                         DWORD tId;
-                        HANDLE hThread=CreateThread(NULL, 0, AirflowZendMethod, data, 0, &tId);
+                        HANDLE hThread=CreateThread(NULL, 0, BackgroundWorker, data, 0, &tId);
                         if(!hThread){
                             MessageBoxW(hWnd,L"CreateThread Failed",L"Error",MB_OK);
                         }else{
+                            SendDlgItemMessage(hWnd,IDC_PROCESS_RATE,PBM_SETPOS ,50,0L);
                             EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_ENTER),FALSE);
                             EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENDIR),FALSE);
                             EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENFILE),FALSE);
@@ -126,8 +126,7 @@ INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lPa
                             EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FILEURL),FALSE);
                         }
                     }else{
-                    //MessageBoxW(hWnd,)
-                    //ShellExecuteW(hWnd,L"open",stdioimage(),NULL,NULL,SW_SHOW);
+                        MessageBoxW(hWnd,stdioimage(),L"You can exit and open this log",MB_OK|MB_ICONERROR);
                     }
                 }
                 break;
