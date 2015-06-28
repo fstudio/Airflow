@@ -18,6 +18,8 @@
 
 #define IDD_AIRFLOW_FIRST                   108
 
+#define IDP_BACKGROUND_PNG              110
+
 #define IDC_AIRFLOW_TITLE                       1000
 #define IDC_EDIT_FILEURL                       1001
 #define IDC_BUTTON_OPENFILE             1002

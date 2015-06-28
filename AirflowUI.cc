@@ -12,6 +12,37 @@
 #include <CommCtrl.h>
 #include <iostream>
 #include <Shlwapi.h>
+#include <atlbase.h>
+#include <atlwin.h>
+#include <d2d1.h>
+#include <d2d1helper.h>
+#include <dwrite.h>
+#include <wincodec.h>
+
+#pragma comment(lib,"d2d1.lib")
+#pragma comment(lib,"windowscodecs.lib")
+#pragma comment(lib,"dwrite.lib")
+
+#ifndef HINST_THISCOMPONENT
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+#endif
+
+template<class Interface>
+inline void
+SafeRelease(
+Interface **ppInterfaceToRelease
+)
+{
+	if (*ppInterfaceToRelease != NULL)
+	{
+		(*ppInterfaceToRelease)->Release();
+
+		(*ppInterfaceToRelease) = NULL;
+	}
+}
+
+#define SAFE_RELEASE(P) if(P){P->Release() ; P = NULL ;}
 
 static const wchar_t * stdioimage()
 {
@@ -45,6 +76,390 @@ public:
 const LPCWSTR PackageSubffix[] = {L".msu",L".msp", L".msi", L".cab"};
 std::vector<std::wstring> vFileList;
 #define MAXPAGES 5
+
+HRESULT LoadResourceBitmap(
+	ID2D1RenderTarget *pRenderTarget,
+	IWICImagingFactory *pIWICFactory,
+	PCWSTR resourceName,
+	PCWSTR resourceType,
+	UINT destinationWidth,
+	UINT destinationHeight,
+	ID2D1Bitmap **ppBitmap
+	);
+
+class AirflowWindow
+	: public CWindowImpl<AirflowWindow, CWindow, CWinTraits<WS_OVERLAPPEDWINDOW, 0> >
+{
+public:
+	DECLARE_WND_CLASS(_T("Airflow.UI.Render.Window"))
+	BEGIN_MSG_MAP(AirflowWindow)
+		MESSAGE_HANDLER(WM_CREATE, OnCreate)
+		MESSAGE_HANDLER(WM_PAINT, OnPaint)
+	END_MSG_MAP()
+	LRESULT OnCreate(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		auto icon = LoadIconW(HINST_THISCOMPONENT, MAKEINTRESOURCEW(IDI_WIZICON));
+		SetIcon(icon, TRUE);
+		return S_OK;
+	}
+	LRESULT OnPaint(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		OnRender();
+		ValidateRect(NULL);
+		return 0;
+	}
+	LRESULT Initialize(){
+		// Initialize device-indpendent resources, such
+		// as the Direct2D factory.
+		return  CreateDeviceIndependentResources();
+	}
+	void OnFinalMessage(HWND hwnd)
+	{
+		::PostQuitMessage(0);
+	}
+	AirflowWindow::AirflowWindow(AirflowStructure &ars):
+		airFlow(ars),
+		m_pD2DFactory(NULL),
+		m_pWICFactory(NULL),
+		m_pDWriteFactory(NULL),
+		m_pRenderTarget(NULL),
+		m_pTextFormat(NULL),
+		m_pBitmap(NULL)
+	{
+	}
+
+	//
+	// Release resources.
+	//
+	AirflowWindow::~AirflowWindow()
+	{
+		SafeRelease(&m_pD2DFactory);
+		SafeRelease(&m_pDWriteFactory);
+		SafeRelease(&m_pRenderTarget);
+		SafeRelease(&m_pTextFormat);
+		SafeRelease(&m_pBitmap);
+	}
+private:
+	AirflowStructure airFlow;
+	HRESULT CreateDeviceIndependentResources()
+	{
+		static const WCHAR msc_fontName[] = L"Segoe UI";
+		static const FLOAT msc_fontSize = 16;
+		HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &m_pD2DFactory);
+		if (SUCCEEDED(hr))
+		{
+
+			// Create a DirectWrite factory.
+			hr = DWriteCreateFactory(
+				DWRITE_FACTORY_TYPE_SHARED,
+				__uuidof(m_pDWriteFactory),
+				reinterpret_cast<IUnknown **>(&m_pDWriteFactory)
+				);
+		}
+		if (SUCCEEDED(hr))
+		{
+			// Create a DirectWrite text format object.
+			hr = m_pDWriteFactory->CreateTextFormat(
+				msc_fontName,
+				NULL,
+				DWRITE_FONT_WEIGHT_NORMAL,
+				DWRITE_FONT_STYLE_NORMAL,
+				DWRITE_FONT_STRETCH_NORMAL,
+				msc_fontSize,
+				L"", //locale
+				&m_pTextFormat
+				);
+		}
+		if (SUCCEEDED(hr))
+		{
+			// Center the text horizontally and vertically.
+			m_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+
+			m_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+		}
+
+		return hr;
+	}
+	HRESULT CreateDeviceResources(){
+		HRESULT hr = S_OK;
+
+		if (!m_pRenderTarget)
+		{
+			RECT rc;
+			::GetClientRect(m_hWnd, &rc);
+
+			D2D1_SIZE_U size = D2D1::SizeU(
+				rc.right - rc.left,
+				rc.bottom - rc.top
+				);
+
+			// Create a Direct2D render target.
+			hr = m_pD2DFactory->CreateHwndRenderTarget(
+				D2D1::RenderTargetProperties(),
+				D2D1::HwndRenderTargetProperties(m_hWnd, size),
+				&m_pRenderTarget
+				);
+			if (SUCCEEDED(hr))
+			{
+				hr = CoCreateInstance(
+					CLSID_WICImagingFactory,
+					NULL,
+					CLSCTX_INPROC_SERVER,
+					IID_PPV_ARGS(&m_pWICFactory)
+					);
+			}
+			// Create a bitmap from an application resource.
+			hr = LoadResourceBitmap(
+				m_pRenderTarget,
+				m_pWICFactory,
+				MAKEINTRESOURCE(IDP_BACKGROUND_PNG),
+				L"PNG",
+				700,
+				0,
+				&m_pBitmap
+				);
+		}
+
+		return hr;
+	}
+	void DiscardDeviceResources(){
+		SafeRelease(&m_pRenderTarget);
+		SafeRelease(&m_pBitmap);
+	}
+
+	HRESULT OnRender();
+
+	void OnResize(
+		UINT width,
+		UINT height
+		){
+		if (m_pRenderTarget)
+		{
+			D2D1_SIZE_U size;
+			size.width = width;
+			size.height = height;
+			m_pRenderTarget->Resize(size);
+		}
+	}
+private:
+	ID2D1Factory *m_pD2DFactory;
+	IWICImagingFactory *m_pWICFactory;
+	IDWriteFactory *m_pDWriteFactory;
+	ID2D1HwndRenderTarget *m_pRenderTarget;
+	IDWriteTextFormat *m_pTextFormat;
+	ID2D1Bitmap *m_pBitmap;
+};
+
+//////
+HRESULT AirflowWindow::OnRender()
+{
+
+	HRESULT hr = CreateDeviceResources();
+
+	if (SUCCEEDED(hr))
+	{
+		// Retrieve the size of the render target.
+		D2D1_SIZE_F renderTargetSize = m_pRenderTarget->GetSize();
+
+		m_pRenderTarget->BeginDraw();
+
+		m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+
+		m_pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::White));
+
+
+		// Draw a bitmap in the upper-left corner of the window.
+		m_pRenderTarget->DrawBitmap(
+			m_pBitmap,
+			D2D1::RectF(0.0f, 0.0f, renderTargetSize.width, renderTargetSize.height)
+			);
+		hr = m_pRenderTarget->EndDraw();
+
+		if (hr == D2DERR_RECREATE_TARGET)
+		{
+			hr = S_OK;
+			DiscardDeviceResources();
+		}
+	}
+
+	return hr;
+}
+
+
+HRESULT LoadResourceBitmap(
+	ID2D1RenderTarget *pRenderTarget,
+	IWICImagingFactory *pIWICFactory,
+	PCWSTR resourceName,
+	PCWSTR resourceType,
+	UINT destinationWidth,
+	UINT destinationHeight,
+	ID2D1Bitmap **ppBitmap
+	)
+{
+	HRESULT hr = S_OK;
+
+	IWICBitmapDecoder* pDecoder = NULL;
+	IWICBitmapFrameDecode* pSource = NULL;
+	IWICStream* pStream = NULL;
+	IWICFormatConverter* pConverter = NULL;
+	IWICBitmapScaler* pScaler = NULL;
+
+	HRSRC imageResHandle = NULL;
+	HGLOBAL imageResDataHandle = NULL;
+	void* pImageFile = NULL;
+	DWORD imageFileSize = 0;
+
+	// Find the resource then load it
+	imageResHandle = FindResource(HINST_THISCOMPONENT, resourceName, resourceType);
+	hr = imageResHandle ? S_OK : E_FAIL;
+	if (SUCCEEDED(hr))
+	{
+		imageResDataHandle = LoadResource(HINST_THISCOMPONENT, imageResHandle);
+
+		hr = imageResDataHandle ? S_OK : E_FAIL;
+	}
+
+	// Lock the resource and calculate the image's size
+	if (SUCCEEDED(hr))
+	{
+		// Lock it to get the system memory pointer
+		pImageFile = LockResource(imageResDataHandle);
+
+		hr = pImageFile ? S_OK : E_FAIL;
+	}
+	if (SUCCEEDED(hr))
+	{
+		// Calculate the size
+		imageFileSize = SizeofResource(HINST_THISCOMPONENT, imageResHandle);
+
+		hr = imageFileSize ? S_OK : E_FAIL;
+	}
+
+	// Create an IWICStream object
+	if (SUCCEEDED(hr))
+	{
+		// Create a WIC stream to map onto the memory
+		hr = pIWICFactory->CreateStream(&pStream);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		// Initialize the stream with the memory pointer and size
+		hr = pStream->InitializeFromMemory(
+			reinterpret_cast<BYTE*>(pImageFile),
+			imageFileSize
+			);
+	}
+
+	// Create IWICBitmapDecoder
+	if (SUCCEEDED(hr))
+	{
+		// Create a decoder for the stream
+		hr = pIWICFactory->CreateDecoderFromStream(
+			pStream,
+			NULL,
+			WICDecodeMetadataCacheOnLoad,
+			&pDecoder
+			);
+	}
+
+	// Retrieve a frame from the image and store it in an IWICBitmapFrameDecode object
+	if (SUCCEEDED(hr))
+	{
+		// Create the initial frame
+		hr = pDecoder->GetFrame(0, &pSource);
+	}
+
+	// Before Direct2D can use the image, it must be converted to the 32bppPBGRA pixel format.
+	// To convert the image format, use the IWICImagingFactory::CreateFormatConverter method to create an IWICFormatConverter object, then use the IWICFormatConverter object's Initialize method to perform the conversion.
+	if (SUCCEEDED(hr))
+	{
+		// Convert the image format to 32bppPBGRA
+		// (DXGI_FORMAT_B8G8R8A8_UNORM + D2D1_ALPHA_MODE_PREMULTIPLIED).
+		hr = pIWICFactory->CreateFormatConverter(&pConverter);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		// If a new width or height was specified, create and
+		// IWICBitmapScaler and use it to resize the image.
+		if (destinationWidth != 0 || destinationHeight != 0)
+		{
+			UINT originalWidth;
+			UINT originalHeight;
+			hr = pSource->GetSize(&originalWidth, &originalHeight);
+			if (SUCCEEDED(hr))
+			{
+				if (destinationWidth == 0)
+				{
+					FLOAT scalar = static_cast<FLOAT>(destinationHeight) / static_cast<FLOAT>(originalHeight);
+					destinationWidth = static_cast<UINT>(scalar * static_cast<FLOAT>(originalWidth));
+				}
+				else if (destinationHeight == 0)
+				{
+					FLOAT scalar = static_cast<FLOAT>(destinationWidth) / static_cast<FLOAT>(originalWidth);
+					destinationHeight = static_cast<UINT>(scalar * static_cast<FLOAT>(originalHeight));
+				}
+
+				hr = pIWICFactory->CreateBitmapScaler(&pScaler);
+				if (SUCCEEDED(hr))
+				{
+					hr = pScaler->Initialize(
+						pSource,
+						destinationWidth,
+						destinationHeight,
+						WICBitmapInterpolationModeCubic
+						);
+					if (SUCCEEDED(hr))
+					{
+						hr = pConverter->Initialize(
+							pScaler,
+							GUID_WICPixelFormat32bppPBGRA,
+							WICBitmapDitherTypeNone,
+							NULL,
+							0.f,
+							WICBitmapPaletteTypeMedianCut
+							);
+					}
+				}
+			}
+		}
+
+		else // use default width and height
+		{
+			hr = pConverter->Initialize(
+				pSource,
+				GUID_WICPixelFormat32bppPBGRA,
+				WICBitmapDitherTypeNone,
+				NULL,
+				0.f,
+				WICBitmapPaletteTypeMedianCut
+				);
+		}
+	}
+
+	// Finally, Create an ID2D1Bitmap object, that can be drawn by a render target and used with other Direct2D objects
+	if (SUCCEEDED(hr))
+	{
+		// Create a Direct2D bitmap from the WIC bitmap
+		hr = pRenderTarget->CreateBitmapFromWicBitmap(
+			pConverter,
+			NULL,
+			ppBitmap
+			);
+	}
+
+	SAFE_RELEASE(pDecoder);
+	SAFE_RELEASE(pSource);
+	SAFE_RELEASE(pStream);
+	SAFE_RELEASE(pConverter);
+	SAFE_RELEASE(pScaler);
+
+	return hr;
+}
+
+
 
 INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
 {
@@ -188,48 +603,20 @@ INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lPa
 
 int AirflowUIChannel(AirflowStructure &cArgs)
 {
-    if(cArgs.cmdMode==CMD_PRINT_VERSION)
-    {
-        ///
-        MessageBoxW(nullptr,AIRFLOW_VERSION_MARK,L"Airflow version box",MB_OK|MB_ICONINFORMATION);
-    }else if(cArgs.cmdMode==CMD_PRINT_USAGE)
-    {
-        MessageBoxW(nullptr,AIRFLOW_USAGE_STRING_GUI,L"Airflow usage:",MB_OK|MB_ICONINFORMATION);
-    }
-    RedirectStdIO redirectIo;
-    PROPSHEETPAGEW   psp;
-    HPROPSHEETPAGE  rhpsp[MAXPAGES];
-    ZeroMemory(&psp,sizeof(psp));
-    ZeroMemory(&rhpsp, sizeof(HPROPSHEETPAGE)*MAXPAGES);
-    psp.dwSize=sizeof(psp);
-    psp.dwFlags=PSP_DEFAULT | PSP_USEHEADERTITLE | PSP_USEHEADERSUBTITLE;
-    psp.lParam=(LPARAM) &cArgs;;
-    psp.hInstance=GetModuleHandle(nullptr);
-    psp.pszHeaderTitle=L"Select Your Install or Update Package";
-    psp.pszTemplate=MAKEINTRESOURCE(IDD_AIRFLOW_FIRST);
-    psp.pfnDlgProc=static_cast<DLGPROC>(WindowMessageProcess);
-    rhpsp[0]           = CreatePropertySheetPage(&psp);
-    if(rhpsp[0]){
-        PROPSHEETHEADER psh;  //defines the property sheet
-        ZeroMemory(&psh, sizeof(psh));
-        psh.dwSize          = sizeof(psh);
-        psh.hInstance       = GetModuleHandle(nullptr);
-        psh.hwndParent      = NULL;
-        psh.phpage          = rhpsp;
-        psh.dwFlags         = PSH_AEROWIZARD ;
-        psh.pszCaption      = L"Airflow -Recover Windows Installer and Update File";
-        psh.pszIcon         = MAKEINTRESOURCE(IDI_WIZICON);
-        psh.nStartPage      = 0;
-        psh.nPages          = 1;
-        if (PropertySheet(&psh) == -1){
-            // an error occurred, call GetLastError() to retrieve it here.
-            auto LastError=GetLastError();
-            std::wstring failedError=L"GetLastError code: ";
-            failedError=failedError+std::to_wstring(LastError);
-            MessageBoxW(nullptr,failedError.c_str(),L"CreatePropertySheetPage Failed",MB_OK);
-        }
-    }else{
-        DestroyPropertySheetPage(rhpsp[0]);
-    }
-    return 0;
+	AirflowWindow airflowUI(cArgs);
+	airflowUI.Initialize();
+	airflowUI.Create(NULL, AirflowWindow::rcDefault, _T("Airflow"));
+	airflowUI.ShowWindow(SW_SHOWNORMAL);
+	airflowUI.UpdateWindow();
+	MSG msg;
+	msg.message = ~(UINT)WM_QUIT;
+	while (msg.message != WM_QUIT)
+	{
+		if (::GetMessage(&msg, NULL, 0, 0))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+	return (int)msg.wParam;
 }
