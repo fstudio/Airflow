@@ -93,6 +93,7 @@ int WINAPI wWinMain(HINSTANCE ,
 {
     UNREFERENCED_PARAMETER(cmdArgs);
     UNREFERENCED_PARAMETER(nCmdShow);
+	HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
     AirflowStructure cArgs;
     int ret=0;
     if(!ArgumentsGet(cArgs))

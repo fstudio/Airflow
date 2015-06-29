@@ -12,22 +12,6 @@ IDP_BACKGROUND_PNG PNG "images\\Background.png"
 1 RT_MANIFEST Airflow.manifest
 #endif
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Main Page
-IDD_AIRFLOW_FIRST DIALOGEX 0, 0, 320, 80
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_DISABLED | WS_CAPTION
-FONT 10, "Segoe UI", 0, 0, 0x0
-BEGIN
-    LTEXT           "Package:",IDC_STATIC,0,0,150,12
-	EDITTEXT        IDC_EDIT_FILEURL,60,0,180,12,ES_AUTOHSCROLL
-    PUSHBUTTON      "View...",IDC_BUTTON_OPENFILE,250,0,50,12
-    LTEXT           "Recover Folder:",IDC_STATIC,0,20,150,12
-	EDITTEXT        IDC_EDIT_FOLDER,60,20,180,12,ES_AUTOHSCROLL
-	PUSHBUTTON      "New Folder...",IDC_BUTTON_OPENDIR,250,20,50,12
-	CONTROL            "Rate",IDC_PROCESS_RATE,"msctls_progress32",WS_BORDER,60,40,180,10, WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR | WS_EX_NOPARENTNOTIFY
-	PUSHBUTTON      "Enter",IDC_BUTTON_ENTER,60,60,80,12
-	PUSHBUTTON      "Cancel",IDC_BUTTON_CANCEL,160,60,80,12
-END
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// This Exe version Info

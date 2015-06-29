@@ -18,6 +18,7 @@
 #include <d2d1helper.h>
 #include <dwrite.h>
 #include <wincodec.h>
+#include <string>
 
 #pragma comment(lib,"d2d1.lib")
 #pragma comment(lib,"windowscodecs.lib")
@@ -88,18 +89,63 @@ HRESULT LoadResourceBitmap(
 	);
 
 class AirflowWindow
-	: public CWindowImpl<AirflowWindow, CWindow, CWinTraits<WS_OVERLAPPEDWINDOW, 0> >
+	: public CWindowImpl<AirflowWindow, CWindow, CWinTraits<WS_OVERLAPPED | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN | WS_CLIPSIBLINGS&~WS_MAXIMIZEBOX, 0> >
 {
 public:
+	RECT mRect;
 	DECLARE_WND_CLASS(_T("Airflow.UI.Render.Window"))
 	BEGIN_MSG_MAP(AirflowWindow)
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_PAINT, OnPaint)
+		MESSAGE_HANDLER(WM_SIZE,OnSize)
+		MESSAGE_HANDLER(WM_DISPLAYCHANGE,OnDisplayChange)
+		MESSAGE_HANDLER(WM_DESTROY,OnDestroy)
+		MESSAGE_HANDLER(WM_DROPFILES,OnDropfiles)
+		MESSAGE_HANDLER(WM_ASYNCHRONOUS_NOTIFY_MSG,OnAsynNotify)
+		COMMAND_ID_HANDLER(IDC_BUTTON_OPENFILE,OnOpenFile)
+		COMMAND_ID_HANDLER(IDC_BUTTON_OPENDIR, OnOpenDIR)
+		COMMAND_ID_HANDLER(IDC_BUTTON_ENTER, OnOptionsEnter)
+		COMMAND_ID_HANDLER(IDC_BUTTON_CANCEL, OnOptionsCancel)
 	END_MSG_MAP()
 	LRESULT OnCreate(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
 	{
 		auto icon = LoadIconW(HINST_THISCOMPONENT, MAKEINTRESOURCEW(IDI_WIZICON));
 		SetIcon(icon, TRUE);
+		ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
+		ChangeWindowMessageFilter(WM_COPYDATA, MSGFLT_ADD);
+		ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
+		::DragAcceptFiles(m_hWnd, TRUE);
+		InitCommonControls();
+		HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+		LOGFONT uifont = { 0 };
+		GetObject(hFont, sizeof(uifont), &uifont);
+		DeleteObject(hFont);
+		hFont = NULL;
+		uifont.lfHeight = 20;
+		uifont.lfWeight = FW_NORMAL;
+		wcscpy_s(uifont.lfFaceName, L"Segoe UI");
+		hFont = CreateFontIndirect(&uifont);
+		DWORD dwButton = WS_CHILDWINDOW | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON | BS_TEXT;
+		DWORD dwButtonEx = WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR | WS_EX_NOPARENTNOTIFY;
+		DWORD dwEdit = WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_VISIBLE | WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL;;
+		DWORD dwEditEx = WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR | WS_EX_NOPARENTNOTIFY | WS_EX_CLIENTEDGE;
+		DWORD dwProgressEx = WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR | WS_EX_NOPARENTNOTIFY;
+		DWORD dwProgress = WS_CHILDWINDOW | WS_CLIPSIBLINGS | WS_VISIBLE;
+		auto hInst = GetModuleHandleW(nullptr);
+		HWND hEditURL = CreateWindowExW(dwEditEx, WC_EDIT, L"", dwEdit, 150, 90, 380, 24,m_hWnd, HMENU(IDC_EDIT_FILEURL),hInst, nullptr);
+		HWND hEditFolder = CreateWindowExW(dwEditEx, WC_EDIT, L"", dwEdit, 150, 140, 380, 24, m_hWnd, HMENU(IDC_EDIT_FOLDER), hInst, nullptr);
+		HWND hBURL = CreateWindowExW(dwButtonEx, WC_BUTTON, L"View...", dwButton, 550, 90, 100, 24, m_hWnd, HMENU(IDC_BUTTON_OPENFILE), hInst, nullptr);
+		HWND hbFolder = CreateWindowExW(dwButtonEx, WC_BUTTON, L"New Folder...", dwButton, 550, 140, 100, 24,m_hWnd, HMENU(IDC_BUTTON_OPENDIR), hInst, nullptr);
+		HWND hProgress = CreateWindowExW(dwProgressEx, PROGRESS_CLASS, L"", dwProgress, 150, 200, 380, 22,m_hWnd, HMENU(IDC_PROCESS_RATE), hInst, nullptr);
+		//::UpdateWindow(hEditURL);
+		HWND hBEnter = CreateWindowExW(dwButtonEx, WC_BUTTON, L"Enter", dwButton, 210, 250, 120, 25, m_hWnd, HMENU(IDC_BUTTON_ENTER), hInst, nullptr);
+		HWND hBCancle = CreateWindowExW(dwButtonEx, WC_BUTTON, L"Cancel", dwButton, 410, 250, 120, 25, m_hWnd, HMENU(IDC_BUTTON_CANCEL), hInst, nullptr);
+		SendMessage(hEditURL, WM_SETFONT, (WPARAM)hFont, lParam);
+		SendMessage(hEditFolder, WM_SETFONT, (WPARAM)hFont, lParam);
+		SendMessage(hBURL, WM_SETFONT, (WPARAM)hFont, lParam);
+		SendMessage(hbFolder, WM_SETFONT, (WPARAM)hFont, lParam);
+		SendMessage(hBEnter, WM_SETFONT, (WPARAM)hFont, lParam);
+		SendMessage(hBCancle, WM_SETFONT, (WPARAM)hFont, lParam);
 		return S_OK;
 	}
 	LRESULT OnPaint(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
@@ -108,18 +154,144 @@ public:
 		ValidateRect(NULL);
 		return 0;
 	}
+	LRESULT OnSize(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		UINT width = LOWORD(lParam);
+		UINT height = HIWORD(lParam);
+		this->OnResize(width,height);
+		return S_OK;
+	}
+	LRESULT OnDisplayChange(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		::InvalidateRect(m_hWnd, NULL, FALSE);
+		//::InvalidateRect(GetDlgItem(IDC_EDIT_FILEURL), NULL, FALSE);
+		return S_OK;
+	}
+	LRESULT OnDestroy(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		///Kill Woker Threads
+		PostQuitMessage(0);
+		return S_OK;
+	}
+	LRESULT OnDropfiles(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		HDROP hDrop = (HDROP)wParam;
+		UINT nFileNum = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
+		WCHAR strFileName[MAX_PATH];
+		for (UINT i = 0; i < nFileNum; i++)
+		{
+			DragQueryFileW(hDrop, i, strFileName, MAX_PATH);
+			if (PathFindSuffixArrayW(strFileName, PackageSubffix, ARRAYSIZE(PackageSubffix)))
+			{
+				vFileList.push_back(strFileName);
+			}
+			std::cout << vFileList.size() << std::endl;
+			if (!vFileList.empty()){
+				::SetWindowTextW(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), vFileList[0].c_str());
+			}
+		}
+		DragFinish(hDrop);
+		::InvalidateRect(m_hWnd, NULL, TRUE);
+		return S_OK;
+	}
+	LRESULT OnAsynNotify(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL & bHandled)
+	{
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_ENTER), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENDIR), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENFILE), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), TRUE);
+		return S_OK;
+	}
+	///Command
+	LRESULT OnOpenFile(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		std::wstring file;
+		auto ret = AirflowFileOpenWindow(m_hWnd, file, L"Open Installer and Update Package");
+		if (ret){
+			::SetWindowTextW(hWndCtl, file.c_str());
+			////toCheck file type
+			std::wcout << file << std::endl;
+		}
+		return S_OK;
+	}
+	LRESULT OnOpenDIR(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		std::wstring folder;
+		auto ret = AirflowFolderOpenWindow(m_hWnd, folder, L"Open Installer and Update Package");
+		if (ret){
+			::SetWindowTextW(hWndCtl, folder.c_str());
+			////toCheck file type
+		}
+		return S_OK;
+	}
+	LRESULT OnOptionsEnter(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandle)
+	{
+		WCHAR szPackagePath[4096] = { 0 };
+		WCHAR szRecover[4096] = { 0 };
+		::GetWindowTextW(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), szPackagePath, 4096);
+		::GetWindowText(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), szRecover, 4096);
+		if (CheckPackageAfterLayout(szPackagePath, 4096, szRecover, 4096)){
+			AirflowTaskData *data = new AirflowTaskData();
+			data->isForce = false;
+			data->sendRate = true;
+			data->uMsgid = WM_ASYNCHRONOUS_NOTIFY_MSG;
+			data->hWnd = m_hWnd;
+			data->mRate = IDC_PROCESS_RATE;
+			data->rawfile = szPackagePath;
+			data->outdir = szRecover;
+			DWORD tId;
+			HANDLE hThread = CreateThread(NULL, 0, BackgroundWorker, data, 0, &tId);
+			if (!hThread){
+				::MessageBoxW(m_hWnd, L"CreateThread Failed", L"Error", MB_OK);
+			}
+			else{
+				::SendDlgItemMessage(m_hWnd, IDC_PROCESS_RATE, PBM_SETPOS, 50, 0L);
+				::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_ENTER), FALSE);
+				::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENDIR), FALSE);
+				::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENFILE), FALSE);
+				::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), FALSE);
+				::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), FALSE);
+			}
+		}
+		else{
+			::MessageBoxW(m_hWnd, stdioimage(), L"You can exit and open this log", MB_OK | MB_ICONERROR);
+		}
+		return S_OK;
+	}
+	LRESULT OnOptionsCancel(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandle)
+	{
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_ENTER), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENDIR), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_BUTTON_OPENFILE), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), TRUE);
+		::EnableWindow(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), TRUE);
+		///Kill Thread and Delete Resource
+		::SendDlgItemMessage(m_hWnd, IDC_PROCESS_RATE, PBM_SETPOS, 0, 0L);
+		return S_OK;
+	}
+	/////////
 	LRESULT Initialize(){
 		// Initialize device-indpendent resources, such
 		// as the Direct2D factory.
-		return  CreateDeviceIndependentResources();
+		auto hr = CreateDeviceIndependentResources();
+		FLOAT dpiX, dpiY;
+		m_pD2DFactory->GetDesktopDpi(&dpiX, &dpiY);
+		mRect.left = CW_USEDEFAULT;
+		mRect.top = CW_USEDEFAULT;
+		mRect.right = mRect.left + static_cast<UINT>(ceil(720.f * dpiX / 96.f));
+		mRect.bottom = mRect.top + static_cast<UINT>(ceil(400.f * dpiY / 96.f));
+		return hr ;
 	}
 	void OnFinalMessage(HWND hwnd)
 	{
 		::PostQuitMessage(0);
 	}
-	AirflowWindow::AirflowWindow(AirflowStructure &ars):
+	AirflowWindow::AirflowWindow(AirflowStructure &ars) :
+		mRect({0}),
 		airFlow(ars),
 		m_pD2DFactory(NULL),
+		m_pSolidBrush(NULL),
 		m_pWICFactory(NULL),
 		m_pDWriteFactory(NULL),
 		m_pRenderTarget(NULL),
@@ -135,6 +307,7 @@ public:
 	{
 		SafeRelease(&m_pD2DFactory);
 		SafeRelease(&m_pDWriteFactory);
+		SafeRelease(&m_pSolidBrush);
 		SafeRelease(&m_pRenderTarget);
 		SafeRelease(&m_pTextFormat);
 		SafeRelease(&m_pBitmap);
@@ -209,6 +382,13 @@ private:
 					IID_PPV_ARGS(&m_pWICFactory)
 					);
 			}
+			if (SUCCEEDED(hr))
+			{
+				hr = m_pRenderTarget->CreateSolidColorBrush(
+					D2D1::ColorF(D2D1::ColorF::Black),
+					&m_pSolidBrush
+					);
+			}
 			// Create a bitmap from an application resource.
 			hr = LoadResourceBitmap(
 				m_pRenderTarget,
@@ -244,6 +424,7 @@ private:
 	}
 private:
 	ID2D1Factory *m_pD2DFactory;
+	ID2D1SolidColorBrush *m_pSolidBrush;
 	IWICImagingFactory *m_pWICFactory;
 	IDWriteFactory *m_pDWriteFactory;
 	ID2D1HwndRenderTarget *m_pRenderTarget;
@@ -274,6 +455,15 @@ HRESULT AirflowWindow::OnRender()
 			m_pBitmap,
 			D2D1::RectF(0.0f, 0.0f, renderTargetSize.width, renderTargetSize.height)
 			);
+		static std::wstring pkg = L"Package:";
+		static std::wstring folder = L"Recover Folder: "; 
+		static std::wstring rate = L"Progress Rate: ";
+		static std::wstring copy = L"\x263B \x2665 Airflow";
+		m_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+		m_pRenderTarget->DrawTextW(pkg.c_str(), pkg.size(), m_pTextFormat, D2D1::RectF(15.0f, 80.0f,130.0f,125.0f), m_pSolidBrush, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+		m_pRenderTarget->DrawTextW(folder.c_str(), folder.size(), m_pTextFormat, D2D1::RectF(15.0f, 140.0f, 130.0f, 160.0f), m_pSolidBrush, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+		m_pRenderTarget->DrawTextW(rate.c_str(), rate.size(), m_pTextFormat, D2D1::RectF(15.0f, 200.0f, 130.0f, 225.0f), m_pSolidBrush, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
+		m_pRenderTarget->DrawTextW(copy.c_str(), copy.size(), m_pTextFormat, D2D1::RectF(20.0f, 320.0f, 600.0f, 340.0f), m_pSolidBrush, D2D1_DRAW_TEXT_OPTIONS_NONE, DWRITE_MEASURING_MODE_NATURAL);
 		hr = m_pRenderTarget->EndDraw();
 
 		if (hr == D2DERR_RECREATE_TARGET)
@@ -459,153 +649,11 @@ HRESULT LoadResourceBitmap(
 	return hr;
 }
 
-
-
-INT_PTR WINAPI WindowMessageProcess(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
-{
-    UNREFERENCED_PARAMETER(wParam);
-    AirflowStructure *pdata = (AirflowStructure *)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-    WCHAR szPackagePath[4096]={0};
-    WCHAR szRecover[4096]={0};
-    switch(uMsg)
-    {
-        case WM_INITDIALOG:
-        {
-            PROPSHEETPAGE *psp = (PROPSHEETPAGE *)lParam;
-            pdata = (AirflowStructure *)(psp->lParam);
-            SetWindowLongPtr(hWnd, GWLP_USERDATA, (DWORD_PTR)pdata);
-            ChangeWindowMessageFilter(WM_DROPFILES, MSGFLT_ADD);
-            ChangeWindowMessageFilter(WM_COPYDATA, MSGFLT_ADD);
-            ChangeWindowMessageFilter(0x0049, MSGFLT_ADD);
-            PropSheet_ShowWizButtons(hWnd,0,
-                PSWIZB_BACK | PSWIZB_NEXT | PSWIZB_FINISH|PSWIZB_CANCEL);
-            if(!pdata->rawfile.empty())
-            {
-                SetWindowTextW(GetDlgItem(hWnd,IDC_EDIT_FILEURL),pdata->rawfile.c_str());
-            }
-            if(!pdata->outdir.empty())
-            {
-                 SetWindowTextW(GetDlgItem(hWnd,IDC_EDIT_FOLDER),pdata->outdir.c_str());
-            }
-            DragAcceptFiles(hWnd, TRUE);
-        }
-        break;
-        case WM_COMMAND:{
-            switch (LOWORD(wParam)){
-                case IDC_BUTTON_OPENFILE:
-                {
-                    std::wstring file;
-                    auto ret=AirflowFileOpenWindow(hWnd,file,L"Open Installer and Update Package");
-                    if(ret){
-                        HWND hOEdit=GetDlgItem(hWnd,IDC_EDIT_FILEURL);
-                        SetWindowTextW(hOEdit,file.c_str());
-                        ////toCheck file type
-                        std::wcout<<file<<std::endl;
-                    }
-                }
-                break;
-                case IDC_BUTTON_OPENDIR:
-                {
-                    std::wstring folder;
-                    auto ret=AirflowFolderOpenWindow(hWnd,folder,L"Open Installer and Update Package");
-                    if(ret){
-                        HWND hOEdit=GetDlgItem(hWnd,IDC_EDIT_FOLDER);
-                        SetWindowTextW(hOEdit,folder.c_str());
-                        ////toCheck file type
-                    }
-                }
-                break;
-                case IDC_BUTTON_ENTER:
-                {
-                    GetWindowText(GetDlgItem(hWnd,IDC_EDIT_FILEURL),szPackagePath,4096);
-                    GetWindowText(GetDlgItem(hWnd,IDC_EDIT_FOLDER),szRecover,4096);
-                    if(CheckPackageAfterLayout(szPackagePath,4096,szRecover,4096)){
-                        AirflowTaskData *data=new AirflowTaskData();
-                        data->isForce=false;
-                        data->sendRate=true;
-                        data->uMsgid=WM_ASYNCHRONOUS_NOTIFY_MSG;
-                        data->hWnd=hWnd;
-                        data->mRate=IDC_PROCESS_RATE;
-                        data->rawfile=szPackagePath;
-                        data->outdir=szRecover;
-                        DWORD tId;
-                        HANDLE hThread=CreateThread(NULL, 0, BackgroundWorker, data, 0, &tId);
-                        if(!hThread){
-                            MessageBoxW(hWnd,L"CreateThread Failed",L"Error",MB_OK);
-                        }else{
-                            SendDlgItemMessage(hWnd,IDC_PROCESS_RATE,PBM_SETPOS ,50,0L);
-                            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_ENTER),FALSE);
-                            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENDIR),FALSE);
-                            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENFILE),FALSE);
-                            EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FOLDER),FALSE);
-                            EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FILEURL),FALSE);
-                        }
-                    }else{
-                        MessageBoxW(hWnd,stdioimage(),L"You can exit and open this log",MB_OK|MB_ICONERROR);
-                    }
-                }
-                break;
-                case IDC_BUTTON_CANCEL:
-                {
-                    EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_ENTER),TRUE);
-                    EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENDIR),TRUE);
-                    EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENFILE),TRUE);
-                    EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FOLDER),TRUE);
-                    EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FILEURL),TRUE);
-                    ///Kill Thread and Delete Resource
-                    SendDlgItemMessage(hWnd,IDC_PROCESS_RATE,PBM_SETPOS ,0,0L);
-                }
-                break;
-                default:
-                break;
-            }
-        }
-        break;
-        case WM_ASYNCHRONOUS_NOTIFY_MSG:
-        {
-            ///En
-            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_ENTER),TRUE);
-            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENDIR),TRUE);
-            EnableWindow(GetDlgItem(hWnd,IDC_BUTTON_OPENFILE),TRUE);
-            EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FOLDER),TRUE);
-            EnableWindow(GetDlgItem(hWnd,IDC_EDIT_FILEURL),TRUE);
-        }
-        break;
-        case WM_DROPFILES:
-        {
-            HDROP hDrop = (HDROP)wParam;
-            UINT nFileNum = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
-            WCHAR strFileName[MAX_PATH];
-            for (UINT i = 0; i < nFileNum; i++)
-            {
-                DragQueryFileW(hDrop, i, strFileName, MAX_PATH);
-                if(PathFindSuffixArrayW(strFileName,PackageSubffix,ARRAYSIZE(PackageSubffix)))
-                {
-                    vFileList.push_back(strFileName);
-                }
-                std::cout<<vFileList.size()<<std::endl;
-                if(!vFileList.empty()){
-                    SetWindowTextW(GetDlgItem(hWnd,IDC_EDIT_FILEURL),vFileList[0].c_str());
-                }
-            }
-            DragFinish(hDrop);
-            InvalidateRect(hWnd, NULL, TRUE);
-        }
-        break;
-        case WM_NOTIFY:
-        break;
-        default:
-        break;
-    }
-    return 0;
-}
-
-
 int AirflowUIChannel(AirflowStructure &cArgs)
 {
 	AirflowWindow airflowUI(cArgs);
 	airflowUI.Initialize();
-	airflowUI.Create(NULL, AirflowWindow::rcDefault, _T("Airflow"));
+	airflowUI.Create(NULL, airflowUI.mRect,_T("Airflow -Recover Microsoft Installer and Update File"));
 	airflowUI.ShowWindow(SW_SHOWNORMAL);
 	airflowUI.UpdateWindow();
 	MSG msg;
