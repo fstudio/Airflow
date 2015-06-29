@@ -6,3 +6,10 @@ Branch [ wizardui ](https://github.com/fstudio/Airflow/tree/wizardui)  UI:
 
 Master UI
 ![Airflow](./images/airflownew.png)
+
+
+###Usage GUI
+
+
+###Usage CUI
+By Default, your can call Airflowd.bat, This File will start Airflow with -console mode
