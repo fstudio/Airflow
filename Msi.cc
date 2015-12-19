@@ -22,6 +22,8 @@ UINT WINAPI RecoverInstallerPackage(const wchar_t *szPackagePath,const wchar_t *
     //MsiConfigureProductExW
     //MsiInstallProduct()
     std::wstring td=L"TARGETDIR=";
+	wchar_t szBuffer[32676];
+	//wsprintfW()
     td+=szRecoverPath;
     MsiInstallProductW(szPackagePath,td.c_str());
     return 0;

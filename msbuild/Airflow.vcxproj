@@ -87,6 +87,7 @@
     <ClCompile Include="..\AirflowUIUtility.cc" />
     <ClCompile Include="..\AirflowZend.cc" />
     <ClCompile Include="..\Expand.cc" />
+    <ClCompile Include="..\FontAwesome.cpp" />
     <ClCompile Include="..\Msi.cc" />
   </ItemGroup>
   <ItemGroup>
@@ -98,6 +99,12 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="..\Airflow.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="..\fonts\FontAwesome.otf">
+      <DeploymentContent>true</DeploymentContent>
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</DeploymentContent>
+    </Font>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

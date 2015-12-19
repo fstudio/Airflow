@@ -76,6 +76,8 @@ struct AirflowTaskData{
     std::wstring outdir;
 };
 
+BOOL WINAPI InitializeAwesomeFont(LPCWSTR fontFile);
+
 int AirflowUIChannel(AirflowStructure &cArgs);
 DWORD WINAPI AirflowZendMethodNonUI(AirflowStructure &airflowst);
 DWORD WINAPI BackgroundWorker(LPVOID lParam);

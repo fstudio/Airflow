@@ -33,6 +33,9 @@
     <ClCompile Include="..\AirflowUIUtility.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\FontAwesome.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Airflow.h">
@@ -49,5 +52,10 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="..\Airflow.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Font Include="..\fonts\FontAwesome.otf">
+      <Filter>Resource Files</Filter>
+    </Font>
   </ItemGroup>
 </Project>
