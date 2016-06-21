@@ -234,7 +234,7 @@ public:
 		WCHAR szPackagePath[4096] = { 0 };
 		WCHAR szRecover[4096] = { 0 };
 		::GetWindowTextW(::GetDlgItem(m_hWnd, IDC_EDIT_FILEURL), szPackagePath, 4096);
-		::GetWindowText(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), szRecover, 4096);
+		::GetWindowTextW(::GetDlgItem(m_hWnd, IDC_EDIT_FOLDER), szRecover, 4096);
 		if (CheckPackageAfterLayout(szPackagePath, 4096, szRecover, 4096)) {
 			AirflowTaskData *data = new AirflowTaskData();
 			data->isForce = false;
